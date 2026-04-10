@@ -101,8 +101,27 @@ div[data-testid="stExpander"] summary{
 """, unsafe_allow_html=True)
 
 # ─── Workbook path ────────────────────────────────────────────
-APP_DIR   = os.path.dirname(os.path.abspath(__file__))
-XLSX_PATH = os.path.join(APP_DIR, "SPX_DATA.xlsx")
+# Robust resolution for Streamlit Cloud where __file__ may resolve
+# to a runner directory rather than the repo root.
+_FNAME = "SPX_DATA.xlsx"
+
+def _find_xlsx(fname):
+    candidates = [
+        # 1. Same dir as this script (local & most Streamlit Cloud cases)
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), fname),
+        # 2. Current working directory (Streamlit Cloud sometimes sets cwd to repo root)
+        os.path.join(os.getcwd(), fname),
+        # 3. Streamlit Cloud canonical repo mount path
+        os.path.join("/mount/src/tcmequitygrowth", fname),
+        # 4. One level up from script (monorepo layouts)
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), fname),
+    ]
+    for p in candidates:
+        if os.path.exists(p):
+            return p, os.path.dirname(p)
+    return None, os.path.dirname(os.path.abspath(__file__))
+
+XLSX_PATH, APP_DIR = _find_xlsx(_FNAME)
 
 # ═════════════════════════════════════════════════════════════
 # PARSING
@@ -476,8 +495,18 @@ st.markdown("""
 # LOAD WORKBOOK FROM SAME DIR
 # ═════════════════════════════════════════════════════════════
 
-if not os.path.exists(XLSX_PATH):
-    st.error(f"❌ Workbook not found.\n\nPlace **SPX_DATA.xlsx** in:\n\n`{APP_DIR}`")
+if not XLSX_PATH or not os.path.exists(XLSX_PATH):
+    searched = [
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), _FNAME),
+        os.path.join(os.getcwd(), _FNAME),
+        os.path.join("/mount/src/tcmequitygrowth", _FNAME),
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), _FNAME),
+    ]
+    st.error(
+        "❌ **SPX_DATA.xlsx not found.** Searched:\n\n"
+        + "\n".join(f"- `{p}`" for p in searched)
+        + f"\n\n**cwd:** `{os.getcwd()}`\n\n**__file__:** `{os.path.abspath(__file__)}`"
+    )
     st.stop()
 
 with st.spinner("Parsing workbook…"):
